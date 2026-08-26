@@ -1,0 +1,13 @@
+Package: com.brkr1.tweaks.docksearchreborn
+Name: DockSearch Reborn
+Version: 0.1
+Architecture: iphoneos-arm
+Description: Adds a browser search bar to the dock. Rootless/roothide port of Ginsu's DockSearch. Adjustable vertical offset and background opacity.
+Maintainer: brkr1
+Author: brkr1
+Section: Tweaks
+Depends: mobilesubstrate, preferenceloader, firmware (>= 14.0), ws.hbang.common (>= 1.11)
+Replaces: com.ginsu.docksearch
+Conflicts: com.ginsu.docksearch
+Depiction: https://brkr1.github.io/repo/depictions/com.brkr1.tweaks.docksearchreborn/depiction.json
+SileoDepiction: https://brkr1.github.io/repo/depictions/com.brkr1.tweaks.docksearchreborn/depiction.json

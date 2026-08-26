@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>DockSearch Reborn. A rootless/roothide port of Ginsu's DockSearch. Search engine and appearance changes apply the next time the home screen appears. Turning the tweak on needs a respring for the search bar to appear.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>cellClass</key>
+			<string>PSSubtitleSwitchTableCell</string>
+			<key>cellSubtitleText</key>
+			<string>Enable/Disable the tweak</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs</string>
+			<key>key</key>
+			<string>isEnabled</string>
+			<key>label</key>
+			<string>Enabled</string>
+			<key>PostNotification</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Configuration</string>
+			<key>footerText</key>
+			<string>Choose your prefered search engine.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>DSSearchEnginePickerController</string>
+			<key>label</key>
+			<string>Search engine</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Appearance</string>
+			<key>footerText</key>
+			<string>Increase or decrease the search bar's background blur.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>label</key>
+			<string>Background opacity</string>
+			<key>key</key>
+			<string>backgroundOpacity</string>
+			<key>defaults</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs</string>
+			<key>default</key>
+			<real>1.0</real>
+			<key>min</key>
+			<real>0.0</real>
+			<key>max</key>
+			<real>1.0</real>
+			<key>PostNotification</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Position</string>
+			<key>footerText</key>
+			<string>Place the search bar above or below the dock icons, then nudge it up or down (negative = up, positive = down).</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>cellClass</key>
+			<string>PSSubtitleSwitchTableCell</string>
+			<key>cellSubtitleText</key>
+			<string>Puts the search bar below icons</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs</string>
+			<key>key</key>
+			<string>bottomSearch</string>
+			<key>label</key>
+			<string>Search bar below icons</string>
+			<key>PostNotification</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs/ReloadPrefs</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSliderCell</string>
+			<key>label</key>
+			<string>Vertical offset</string>
+			<key>key</key>
+			<string>verticalOffset</string>
+			<key>defaults</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs</string>
+			<key>default</key>
+			<real>0.0</real>
+			<key>min</key>
+			<real>-30.0</real>
+			<key>max</key>
+			<real>30.0</real>
+			<key>PostNotification</key>
+			<string>com.brkr1.tweaks.docksearchreborn.hbprefs/ReloadPrefs</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>DockSearch Reborn</string>
+</dict>
+</plist>

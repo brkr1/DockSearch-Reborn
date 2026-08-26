@@ -1,0 +1,10 @@
+{
+    entry = {
+	    bundle = DockSearchRebornPrefs;
+	    cell = PSLinkCell;
+	    detail = DockSearchRebornPrefsController;
+	    icon = "PrefIcon.png";
+	    isController = 1;
+	    label = "DockSearch Reborn";
+    };
+}

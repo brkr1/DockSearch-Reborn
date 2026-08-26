@@ -1,0 +1,40 @@
+ARCHS = arm64 arm64e
+
+ifeq ($(THEOS_PACKAGE_SCHEME), rootless)
+    TARGET := iphone:clang:latest:15.0
+    TARGET_OS_DEPLOYMENT_VERSION = 15.0
+    ifneq ($(wildcard $(THEOS)/sdks/iPhoneOS15.6.sdk),)
+        SYSROOT=$(THEOS)/sdks/iPhoneOS15.6.sdk
+        SDKVERSION = 15.6
+        INCLUDE_SDKVERSION = 15.6
+    endif
+else
+    TARGET := iphone:clang:latest:13.0
+    TARGET_OS_DEPLOYMENT_VERSION = 13.0
+endif
+
+include $(THEOS)/makefiles/common.mk
+
+DSR_PTRAUTH_FLAG := -fno-ptrauth-objc-class-ro
+DSR_PTRAUTH_SUPPORTED := $(shell $(TARGET_CC) -target arm64e-apple-ios15.0 -x objective-c \
+	-fsyntax-only $(DSR_PTRAUTH_FLAG) /dev/null >/dev/null 2>&1 && echo yes)
+
+ifeq ($(DSR_PTRAUTH_SUPPORTED),yes)
+DSR_PTRAUTH_CFLAGS := $(DSR_PTRAUTH_FLAG)
+else ifeq ($(filter arm64e,$(ARCHS)),)
+DSR_PTRAUTH_CFLAGS :=
+else
+$(error $(DSR_PTRAUTH_FLAG) is not accepted by $(TARGET_CC), but arm64e is in ARCHS. \
+Building anyway emits signed class_ro pointers and produces a dylib that crashes every \
+process it is injected into. Build on macOS with Xcode's clang, which supports this flag.)
+endif
+
+TWEAK_NAME = DockSearchReborn
+
+DockSearchReborn_FILES = Tweak.xm
+DockSearchReborn_CFLAGS = -fobjc-arc $(DSR_PTRAUTH_CFLAGS)
+DockSearchReborn_FRAMEWORKS = UIKit
+DockSearchReborn_PRIVATE_FRAMEWORKS = SpringBoardHome SpringBoard SearchUI MaterialKit
+DockSearchReborn_EXTRA_FRAMEWORKS = Cephei
+
+include $(THEOS_MAKE_PATH)/tweak.mk
