@@ -59,6 +59,7 @@ struct SBIconImageInfo {
 - (BOOL)canResignFirstResponder;
 - (BOOL)textFieldShouldReturn: (id)field;
 - (void)textFieldDidBeginEditing: (id)field;
+- (void)textFieldDidEndEditing: (id)field;
 - (BOOL)resignFirstResponder;
 - (void)_cancelButtonWasHit: (id)sender;
 - (void)setShowsCancelButton: (BOOL)shows animated: (BOOL)animated;
@@ -131,12 +132,25 @@ static id dsr_ivar(id object, const char *name) {
     return ivar ? object_getIvar(object, ivar) : nil;
 }
 
+// Walks up from a view until it finds its enclosing SBDockView. Shared by
+// viewDidLoad (to parent the search bar directly under the dock instead of
+// inside the icon list, which clips its subviews) and DSSearchBar's own
+// dsr_dockView (which needs the same climb from the search bar itself).
+static SBDockView *dsr_findDockView(UIView *view) {
+    UIView *ancestor = view;
+    while (ancestor && ![ancestor isKindOfClass: [SBDockView class]]) {
+        ancestor = ancestor.superview;
+    }
+    return (SBDockView *) ancestor;
+}
+
 #pragma mark - DSManager (shared state)
 
 @class DSSearchBar;
 
 @interface DSManager : NSObject
 @property (nonatomic, strong) DSSearchBar *searchBar;
+@property (nonatomic, strong) UIView *backdropView;
 @property (nonatomic, assign) BOOL isRaised;
 @property (nonatomic, assign) BOOL isFloatingDock;
 + (instancetype)sharedInstance;
@@ -215,6 +229,9 @@ static id dsr_ivar(id object, const char *name) {
 - (void)dsr_searchWithText: (NSString *)text;
 - (void)dsr_dismiss;
 - (void)dsr_animateWithContext: (NSInteger)context;
+- (void)textFieldDidEndEditing: (id)field;
+- (void)dsr_wireCancelButton;
+- (void)dsr_handleTapOutside: (UITapGestureRecognizer *)recognizer;
 - (NSString *)dsr_displayNameForCurrentBrowser;
 - (SBDockView *)dsr_dockView;
 - (void)dsr_applyBackgroundOpacity;
@@ -236,15 +253,17 @@ static id dsr_ivar(id object, const char *name) {
 }
 
 - (BOOL)textFieldShouldReturn: (id)field {
-    // Search for the text we entered, then clear input and dismiss the search bar.
+    // Search for the text we entered, then dismiss the search bar
+    // (textFieldDidEndEditing: clears the text as part of that dismiss).
     [self dsr_searchWithText: self.searchTextField.text];
-    self.searchTextField.text = nil;
     [self dsr_dismiss];
     return [super textFieldShouldReturn: field];
 }
 
 - (void)_cancelButtonWasHit: (id)sender {
-    // Dismisses the search bar when the 'cancel' button is tapped.
+    // Kept as a harmless fallback, but confirmed (via an on-device view-tree
+    // dump) that Apple's Cancel button never actually routes through this -
+    // dsr_wireCancelButton below is the real fix.
     [self dsr_dismiss];
     [super _cancelButtonWasHit: sender];
 }
@@ -253,6 +272,61 @@ static id dsr_ivar(id object, const char *name) {
     // Raise the dock when typing begins.
     [super textFieldDidBeginEditing: field];
     [self dsr_animateWithContext: 1];
+    [self dsr_wireCancelButton];
+    // The Cancel button isn't always installed by the time this returns -
+    // setShowsCancelButton: sometimes finishes its own animation slightly
+    // later, so retry once it's had time to actually appear.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t) (0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self dsr_wireCancelButton];
+    });
+}
+
+- (void)dsr_wireCancelButton {
+    // Apple's Cancel button is a plain UIButton, a direct subview of the
+    // search bar, whose internal target/action never reaches any override
+    // this tweak has - confirmed by dumping the actual view tree on-device.
+    // Wiring our own target directly onto it is independent of whatever
+    // Apple wired underneath: a UIButton accepts multiple targets for the
+    // same event without conflict. removeTarget: first keeps this idempotent
+    // across repeated calls (immediate + delayed retry above).
+    for (UIView *subview in self.subviews) {
+        if ([subview isKindOfClass: [UIButton class]]) {
+            UIButton *button = (UIButton *) subview;
+            [button removeTarget: self action: @selector(dsr_dismiss) forControlEvents: UIControlEventTouchUpInside];
+            [button addTarget: self action: @selector(dsr_dismiss) forControlEvents: UIControlEventTouchUpInside];
+        }
+    }
+}
+
+- (void)dsr_handleTapOutside: (UITapGestureRecognizer *)recognizer {
+    // There's no built-in "tap outside dismisses" behaviour on the home
+    // screen the way there would be in a normal app - this gesture
+    // recognizer (added once, to the whole root folder view, in viewDidLoad)
+    // is what makes tapping elsewhere behave like Cancel. cancelsTouchesInView
+    // is NO so it never blocks the tap it's observing from also reaching
+    // whatever's actually underneath (an icon, the wallpaper, etc).
+    if (!DSManager.sharedInstance.isRaised) {
+        return;
+    }
+    CGPoint location = [recognizer locationInView: self];
+    if (CGRectContainsPoint(self.bounds, location)) {
+        // Tap landed on the bar itself (or its Cancel/x buttons) - let
+        // their own handling deal with it, don't double-dismiss.
+        return;
+    }
+    [self dsr_dismiss];
+}
+
+- (void)textFieldDidEndEditing: (id)field {
+    // Fires whenever the field loses first-responder status for any reason,
+    // including tapping outside the bar (which doesn't route through
+    // _cancelButtonWasHit:) - so this is the one place that makes "tap
+    // outside" behave exactly like Cancel: same dismiss, same cleared text.
+    // dsr_dismiss's own resignFirstResponder is a harmless no-op here since
+    // the field is already resigning by the time this fires.
+    [super textFieldDidEndEditing: field];
+    self.searchTextField.text = nil;
+    [self dsr_dismiss];
 }
 
 - (void)didAddSubview: (UIView *)subview {
@@ -318,9 +392,27 @@ static id dsr_ivar(id object, const char *name) {
         DSManager.sharedInstance.isRaised = NO;
         transformation = CGAffineTransformIdentity;
     }
+    CGAffineTransform counterTransformation = CGAffineTransformInvert(transformation);
 
     [UIView animateWithDuration: 0.4 delay: 0.0 usingSpringWithDamping: 0.8 initialSpringVelocity: 0.4 options: UIViewAnimationOptionCurveEaseInOut animations: ^{
+        // Moves the whole SBDockView (proven safe for Cancel/tap-outside -
+        // the search bar's own position relative to its clipping parent,
+        // dockIconListView, never changes, so it never loses touches).
         [self dsr_dockView].transform = transformation;
+        // ...then cancels that movement on every OTHER view sharing the
+        // search bar's immediate parent (dockIconListView - the icons),
+        // so the icons visually stay put while the bar, left untouched
+        // here, still inherits the dock's own transform and rises with it.
+        // The search bar itself is never reparented and its own transform
+        // is never touched - a previous attempt that moved the bar itself
+        // (self.transform) broke Cancel by changing its hierarchy; this
+        // achieves the same visual result without going anywhere near that.
+        for (UIView *sibling in self.superview.subviews) {
+            if (sibling != self) {
+                sibling.transform = counterTransformation;
+            }
+        }
+        DSManager.sharedInstance.backdropView.alpha = (context == 1) ? 0.6 : 0.0;
     } completion: nil];
 }
 
@@ -331,14 +423,9 @@ static id dsr_ivar(id object, const char *name) {
 }
 
 - (SBDockView *)dsr_dockView {
-    // Cycle through superviews until we find the SBDockView. This method of
-    // finding the SBDockView allows for compatibility with some other dock
-    // tweaks like Multipla.
-    UIView *superDuperView = self.superview;
-    while (superDuperView && ![superDuperView isKindOfClass: [SBDockView class]]) {
-        superDuperView = superDuperView.superview;
-    }
-    return (SBDockView *) superDuperView;
+    // Compatibility with some other dock tweaks like Multipla, which nest
+    // things differently - climb rather than assume a fixed depth.
+    return dsr_findDockView(self.superview);
 }
 
 @end
@@ -361,9 +448,33 @@ static id dsr_ivar(id object, const char *name) {
         return;
     }
 
+    // Full-screen dim, faded in/out by DSSearchBar's own raise/dismiss
+    // animation - inserted at index 0 so it sits behind everything already
+    // in self.view (icons, dock) without needing to know exactly where in
+    // that hierarchy the dock itself lives. userInteractionEnabled = NO so
+    // it never intercepts the tap-outside gesture recognizer below it.
+    // A plain dim, not a real UIVisualEffectView blur: the wallpaper lives
+    // in a separate window behind this one, and real-time blur can't
+    // sample across windows - it rendered as flat grey with nothing of its
+    // own window to blur, confirmed on-device.
+    UIView *dsrBackdrop = [[UIView alloc] initWithFrame: self.view.bounds];
+    dsrBackdrop.backgroundColor = [UIColor blackColor];
+    dsrBackdrop.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    dsrBackdrop.userInteractionEnabled = NO;
+    dsrBackdrop.alpha = 0.0;
+    DSManager.sharedInstance.backdropView = dsrBackdrop;
+    [self.view insertSubview: dsrBackdrop atIndex: 0];
+
     // Init and add the search bar.
     DSManager.sharedInstance.searchBar = [[DSSearchBar alloc] initWithFrame: CGRectMake(15, 22, self.dockIconListView.frame.size.width - 30, 40)];
     [self.dockIconListView addSubview: DSManager.sharedInstance.searchBar];
+
+    // Tapping anywhere outside the bar while it's raised dismisses it, same
+    // as Cancel. cancelsTouchesInView = NO so this never blocks the tap it
+    // observes from also reaching whatever's underneath.
+    UITapGestureRecognizer *dsrTapOutside = [[UITapGestureRecognizer alloc] initWithTarget: DSManager.sharedInstance.searchBar action: @selector(dsr_handleTapOutside:)];
+    dsrTapOutside.cancelsTouchesInView = NO;
+    [self.view addGestureRecognizer: dsrTapOutside];
 }
 
 - (void)viewWillAppear: (BOOL)animated {
